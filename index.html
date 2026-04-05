@@ -3,104 +3,154 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>現場予定表アプリ（カレンダー版）</title>
+  <title>現場予定表アプリ（完全版）</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-zinc-100">
-  <div id="root"></div>
+<div id="root"></div>
 
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+<script type="text/babel">
+const { useState, useEffect } = React;
 
-    function getDaysInMonth(year, month) {
-      return new Date(year, month + 1, 0).getDate();
-    }
+const defaultMembers = ["社長","班長","山田","田中"];
+const defaultWorkTypes = ["舗装工","路盤工","掘削","埋戻し"];
+const statuses = ["予定","変更","確定","中止"];
 
-    function ScheduleApp() {
-      const [plans, setPlans] = useState(() => {
-        const saved = localStorage.getItem("plans");
-        return saved ? JSON.parse(saved) : [];
-      });
+function App(){
 
-      const [currentDate, setCurrentDate] = useState(new Date());
-      const [selectedDate, setSelectedDate] = useState("");
-      const [site, setSite] = useState("");
+  const [plans,setPlans] = useState(()=>{
+    const saved = localStorage.getItem("plans_v2");
+    return saved?JSON.parse(saved):[];
+  });
 
-      useEffect(() => {
-        localStorage.setItem("plans", JSON.stringify(plans));
-      }, [plans]);
+  const [members,setMembers] = useState(()=>{
+    const saved = localStorage.getItem("members_v2");
+    return saved?JSON.parse(saved):defaultMembers;
+  });
 
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth();
-      const days = getDaysInMonth(year, month);
+  const [workTypes,setWorkTypes] = useState(()=>{
+    const saved = localStorage.getItem("types_v2");
+    return saved?JSON.parse(saved):defaultWorkTypes;
+  });
 
-      function formatDate(day) {
-        return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      }
+  const [date,setDate]=useState("");
+  const [site,setSite]=useState("");
+  const [leader,setLeader]=useState(members[0]);
+  const [workType,setWorkType]=useState(workTypes[0]);
+  const [status,setStatus]=useState("予定");
 
-      function addPlan() {
-        if (!selectedDate || !site) return alert("日付と現場名入れて");
-        setPlans([{ date: selectedDate, site }, ...plans]);
-        setSite("");
-      }
+  useEffect(()=>{
+    localStorage.setItem("plans_v2",JSON.stringify(plans));
+  },[plans]);
 
-      function getPlansByDate(date) {
-        return plans.filter((p) => p.date === date);
-      }
+  useEffect(()=>{
+    localStorage.setItem("members_v2",JSON.stringify(members));
+  },[members]);
 
-      function changeMonth(diff) {
-        const d = new Date(currentDate);
-        d.setMonth(d.getMonth() + diff);
-        setCurrentDate(d);
-      }
+  useEffect(()=>{
+    localStorage.setItem("types_v2",JSON.stringify(workTypes));
+  },[workTypes]);
 
-      return (
-        <div className="p-4 max-w-5xl mx-auto">
-          <div className="flex justify-between items-center mb-4">
-            <button onClick={() => changeMonth(-1)}>◀</button>
-            <h1 className="text-xl font-bold">{year}年 {month + 1}月</h1>
-            <button onClick={() => changeMonth(1)}>▶</button>
+  function addPlan(){
+    if(!date||!site)return alert("日付と現場入れて");
+    setPlans([{id:Date.now(),date,site,leader,workType,status},...plans]);
+  }
+
+  function removePlan(id){
+    setPlans(plans.filter(p=>p.id!==id));
+  }
+
+  function nextStatus(id){
+    setPlans(plans.map(p=>{
+      if(p.id!==id)return p;
+      const i=statuses.indexOf(p.status);
+      return {...p,status:statuses[(i+1)%statuses.length]};
+    }))
+  }
+
+  function getColor(s){
+    if(s==="確定")return "bg-green-200";
+    if(s==="変更")return "bg-yellow-200";
+    if(s==="中止")return "bg-red-200";
+    return "bg-gray-100";
+  }
+
+  function getDays(){
+    const d=new Date();
+    const y=d.getFullYear();
+    const m=d.getMonth();
+    const last=new Date(y,m+1,0).getDate();
+    return Array.from({length:last},(_,i)=>i+1);
+  }
+
+  function format(day){
+    const d=new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
+
+  return (
+  <div className="p-4 max-w-6xl mx-auto space-y-4">
+
+    <h1 className="text-2xl font-bold">現場予定表（完全版）</h1>
+
+    {/* カレンダー */}
+    <div className="grid grid-cols-7 gap-2">
+      {getDays().map(day=>{
+        const d=format(day);
+        const list=plans.filter(p=>p.date===d);
+        return (
+          <div key={day} onClick={()=>setDate(d)} className="bg-white p-2 rounded border cursor-pointer">
+            <div className="font-bold">{day}</div>
+            {list.map(p=>(
+              <div key={p.id} className={`text-xs ${getColor(p.status)}`}>
+                {p.site}
+              </div>
+            ))}
           </div>
+        )
+      })}
+    </div>
 
-          <div className="grid grid-cols-7 gap-2 text-center text-sm">
-            {["日","月","火","水","木","金","土"].map(d => <div key={d}>{d}</div>)}
+    {/* 登録 */}
+    <div className="bg-white p-4 rounded shadow space-y-2">
+      <input value={date} readOnly className="border p-2 w-full" />
+      <input value={site} onChange={e=>setSite(e.target.value)} placeholder="現場" className="border p-2 w-full" />
 
-            {Array.from({ length: days }).map((_, i) => {
-              const day = i + 1;
-              const dateStr = formatDate(day);
-              const dayPlans = getPlansByDate(dateStr);
+      <select value={leader} onChange={e=>setLeader(e.target.value)} className="border p-2 w-full">
+        {members.map(m=><option key={m}>{m}</option>)}
+      </select>
 
-              return (
-                <div
-                  key={day}
-                  onClick={() => setSelectedDate(dateStr)}
-                  className="border rounded p-2 cursor-pointer bg-white hover:bg-blue-50"
-                >
-                  <div className="font-bold">{day}</div>
-                  {dayPlans.map((p, idx) => (
-                    <div key={idx} className="text-xs truncate">{p.site}</div>
-                  ))}
-                </div>
-              );
-            })}
+      <select value={workType} onChange={e=>setWorkType(e.target.value)} className="border p-2 w-full">
+        {workTypes.map(w=><option key={w}>{w}</option>)}
+      </select>
+
+      <button onClick={addPlan} className="bg-black text-white w-full p-2">追加</button>
+    </div>
+
+    {/* 一覧 */}
+    <div className="space-y-2">
+      {plans.map(p=>(
+        <div key={p.id} className="bg-white p-3 rounded shadow flex justify-between items-center">
+          <div>
+            <div>{p.date} {p.site}</div>
+            <div className="text-sm text-gray-500">{p.workType} / {p.leader}</div>
           </div>
-
-          <div className="mt-6 bg-white p-4 rounded shadow">
-            <div className="mb-2 font-bold">予定登録</div>
-            <div className="flex gap-2">
-              <input value={selectedDate} readOnly className="border p-2" />
-              <input value={site} onChange={(e)=>setSite(e.target.value)} placeholder="現場名" className="border p-2 flex-1" />
-              <button onClick={addPlan} className="bg-black text-white px-4">追加</button>
-            </div>
+          <div className="flex gap-2">
+            <button onClick={()=>nextStatus(p.id)} className="text-xs">状態</button>
+            <button onClick={()=>removePlan(p.id)} className="text-xs text-red-500">削除</button>
           </div>
         </div>
-      );
-    }
+      ))}
+    </div>
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<ScheduleApp />);
-  </script>
+  </div>
+  )
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
 </body>
 </html>
