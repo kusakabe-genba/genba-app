@@ -20,43 +20,60 @@ const defaultWorkTypes = ["舗装工","路盤工","掘削","埋戻し"];
 const statuses = ["予定","変更","確定","中止"];
 
 function App(){
-
   const [plans,setPlans] = useState(()=>{
-    const saved = localStorage.getItem("plans_v2");
-    return saved?JSON.parse(saved):[];
+    const saved = localStorage.getItem("plans_v3");
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [members,setMembers] = useState(()=>{
-    const saved = localStorage.getItem("members_v2");
-    return saved?JSON.parse(saved):defaultMembers;
+    const saved = localStorage.getItem("members_v3");
+    return saved ? JSON.parse(saved) : defaultMembers;
   });
 
   const [workTypes,setWorkTypes] = useState(()=>{
-    const saved = localStorage.getItem("types_v2");
-    return saved?JSON.parse(saved):defaultWorkTypes;
+    const saved = localStorage.getItem("types_v3");
+    return saved ? JSON.parse(saved) : defaultWorkTypes;
   });
 
-  const [date,setDate]=useState("");
-  const [site,setSite]=useState("");
-  const [leader,setLeader]=useState(members[0]);
-  const [workType,setWorkType]=useState(workTypes[0]);
-  const [status,setStatus]=useState("予定");
+  const today = new Date();
+  const [currentDate,setCurrentDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [date,setDate] = useState("");
+  const [site,setSite] = useState("");
+  const [leader,setLeader] = useState(defaultMembers[0]);
+  const [workType,setWorkType] = useState(defaultWorkTypes[0]);
+  const [status,setStatus] = useState("予定");
+  const [newMember,setNewMember] = useState("");
+  const [newType,setNewType] = useState("");
+  const [editingMemberIndex,setEditingMemberIndex] = useState(null);
+  const [editingMemberValue,setEditingMemberValue] = useState("");
+  const [editingTypeIndex,setEditingTypeIndex] = useState(null);
+  const [editingTypeValue,setEditingTypeValue] = useState("");
 
   useEffect(()=>{
-    localStorage.setItem("plans_v2",JSON.stringify(plans));
+    localStorage.setItem("plans_v3", JSON.stringify(plans));
   },[plans]);
 
   useEffect(()=>{
-    localStorage.setItem("members_v2",JSON.stringify(members));
+    localStorage.setItem("members_v3", JSON.stringify(members));
   },[members]);
 
   useEffect(()=>{
-    localStorage.setItem("types_v2",JSON.stringify(workTypes));
+    localStorage.setItem("types_v3", JSON.stringify(workTypes));
+  },[workTypes]);
+
+  useEffect(()=>{
+    if (!members.includes(leader)) setLeader(members[0] || "");
+  },[members]);
+
+  useEffect(()=>{
+    if (!workTypes.includes(workType)) setWorkType(workTypes[0] || "");
   },[workTypes]);
 
   function addPlan(){
-    if(!date||!site)return alert("日付と現場入れて");
-    setPlans([{id:Date.now(),date,site,leader,workType,status},...plans]);
+    if(!date || !site) return alert("日付と現場を入れて");
+    setPlans([{ id: Date.now(), date, site, leader, workType, status }, ...plans]);
+    setSite("");
+    setStatus("予定");
   }
 
   function removePlan(id){
@@ -65,88 +82,263 @@ function App(){
 
   function nextStatus(id){
     setPlans(plans.map(p=>{
-      if(p.id!==id)return p;
-      const i=statuses.indexOf(p.status);
-      return {...p,status:statuses[(i+1)%statuses.length]};
-    }))
+      if(p.id !== id) return p;
+      const i = statuses.indexOf(p.status);
+      return { ...p, status: statuses[(i+1)%statuses.length] };
+    }));
+  }
+
+  function addMember(){
+    const v = newMember.trim();
+    if(!v) return;
+    if(members.includes(v)) return alert("同じ名前がある");
+    setMembers([...members, v]);
+    setNewMember("");
+  }
+
+  function startEditMember(i){
+    setEditingMemberIndex(i);
+    setEditingMemberValue(members[i]);
+  }
+
+  function saveEditMember(i){
+    const v = editingMemberValue.trim();
+    if(!v) return;
+    if(members.some((m,idx)=>idx!==i && m===v)) return alert("同じ名前がある");
+    const oldName = members[i];
+    const next = [...members];
+    next[i] = v;
+    setMembers(next);
+    setPlans(plans.map(p=>({
+      ...p,
+      leader: p.leader === oldName ? v : p.leader
+    })));
+    if(leader === oldName) setLeader(v);
+    setEditingMemberIndex(null);
+    setEditingMemberValue("");
+  }
+
+  function deleteMember(i){
+    const name = members[i];
+    const next = members.filter((_,idx)=>idx!==i);
+    setMembers(next);
+    setPlans(plans.map(p=>({
+      ...p,
+      leader: p.leader === name ? (next[0] || "") : p.leader
+    })));
+    if(leader === name) setLeader(next[0] || "");
+  }
+
+  function addWorkType(){
+    const v = newType.trim();
+    if(!v) return;
+    if(workTypes.includes(v)) return alert("同じ工種がある");
+    setWorkTypes([...workTypes, v]);
+    setNewType("");
+  }
+
+  function startEditType(i){
+    setEditingTypeIndex(i);
+    setEditingTypeValue(workTypes[i]);
+  }
+
+  function saveEditType(i){
+    const v = editingTypeValue.trim();
+    if(!v) return;
+    if(workTypes.some((w,idx)=>idx!==i && w===v)) return alert("同じ工種がある");
+    const oldType = workTypes[i];
+    const next = [...workTypes];
+    next[i] = v;
+    setWorkTypes(next);
+    setPlans(plans.map(p=>({
+      ...p,
+      workType: p.workType === oldType ? v : p.workType
+    })));
+    if(workType === oldType) setWorkType(v);
+    setEditingTypeIndex(null);
+    setEditingTypeValue("");
+  }
+
+  function deleteType(i){
+    const typeName = workTypes[i];
+    const next = workTypes.filter((_,idx)=>idx!==i);
+    setWorkTypes(next);
+    setPlans(plans.map(p=>({
+      ...p,
+      workType: p.workType === typeName ? (next[0] || "") : p.workType
+    })));
+    if(workType === typeName) setWorkType(next[0] || "");
   }
 
   function getColor(s){
-    if(s==="確定")return "bg-green-200";
-    if(s==="変更")return "bg-yellow-200";
-    if(s==="中止")return "bg-red-200";
+    if(s === "確定") return "bg-green-200";
+    if(s === "変更") return "bg-yellow-200";
+    if(s === "中止") return "bg-red-200";
     return "bg-gray-100";
   }
 
-  function getDays(){
-    const d=new Date();
-    const y=d.getFullYear();
-    const m=d.getMonth();
-    const last=new Date(y,m+1,0).getDate();
-    return Array.from({length:last},(_,i)=>i+1);
+  function changeMonth(diff){
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()+diff, 1));
   }
 
-  function format(day){
-    const d=new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  function getCalendarCells(){
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    const cells = [];
+    for(let i=0;i<firstDay;i++) cells.push(null);
+    for(let day=1; day<=daysInMonth; day++) cells.push(day);
+    while(cells.length % 7 !== 0) cells.push(null);
+    return cells;
   }
+
+  function formatDate(day){
+    const y = currentDate.getFullYear();
+    const m = String(currentDate.getMonth()+1).padStart(2,'0');
+    const d = String(day).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const monthLabel = `${currentDate.getFullYear()}年 ${currentDate.getMonth()+1}月`;
+  const cells = getCalendarCells();
 
   return (
-  <div className="p-4 max-w-6xl mx-auto space-y-4">
+    <div className="p-4 max-w-7xl mx-auto space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h1 className="text-2xl font-bold">現場予定表（完全版）</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={()=>changeMonth(-1)} className="rounded-xl border px-3 py-2 bg-white">◀</button>
+          <div className="min-w-40 text-center text-lg font-bold">{monthLabel}</div>
+          <button onClick={()=>changeMonth(1)} className="rounded-xl border px-3 py-2 bg-white">▶</button>
+        </div>
+      </div>
 
-    <h1 className="text-2xl font-bold">現場予定表（完全版）</h1>
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-2xl shadow">
+            <div className="grid grid-cols-7 gap-2 text-center text-sm font-bold mb-2">
+              {["日","月","火","水","木","金","土"].map(d=><div key={d}>{d}</div>)}
+            </div>
+            <div className="grid grid-cols-7 gap-2">
+              {cells.map((day,idx)=>{
+                if(day===null){
+                  return <div key={idx} className="min-h-24 rounded-xl bg-zinc-50 border"></div>;
+                }
+                const d = formatDate(day);
+                const list = plans.filter(p=>p.date===d);
+                const selected = date===d;
+                return (
+                  <div
+                    key={idx}
+                    onClick={()=>setDate(d)}
+                    className={`min-h-24 rounded-xl border p-2 cursor-pointer bg-white hover:bg-blue-50 ${selected ? 'ring-2 ring-blue-500' : ''}`}
+                  >
+                    <div className="font-bold mb-1">{day}</div>
+                    <div className="space-y-1">
+                      {list.slice(0,3).map(p=>(
+                        <div key={p.id} className={`text-[11px] rounded px-1 py-0.5 truncate ${getColor(p.status)}`}>
+                          {p.site}
+                        </div>
+                      ))}
+                      {list.length>3 && <div className="text-[10px] text-zinc-500">他{list.length-3}件</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
-    {/* カレンダー */}
-    <div className="grid grid-cols-7 gap-2">
-      {getDays().map(day=>{
-        const d=format(day);
-        const list=plans.filter(p=>p.date===d);
-        return (
-          <div key={day} onClick={()=>setDate(d)} className="bg-white p-2 rounded border cursor-pointer">
-            <div className="font-bold">{day}</div>
-            {list.map(p=>(
-              <div key={p.id} className={`text-xs ${getColor(p.status)}`}>
-                {p.site}
+          <div className="bg-white p-4 rounded-2xl shadow space-y-3">
+            <div className="font-bold">予定登録</div>
+            <input value={date} readOnly placeholder="日付をカレンダーで選択" className="border p-2 w-full rounded-xl" />
+            <input value={site} onChange={e=>setSite(e.target.value)} placeholder="現場名" className="border p-2 w-full rounded-xl" />
+            <select value={leader} onChange={e=>setLeader(e.target.value)} className="border p-2 w-full rounded-xl">
+              {members.map(m=><option key={m}>{m}</option>)}
+            </select>
+            <select value={workType} onChange={e=>setWorkType(e.target.value)} className="border p-2 w-full rounded-xl">
+              {workTypes.map(w=><option key={w}>{w}</option>)}
+            </select>
+            <select value={status} onChange={e=>setStatus(e.target.value)} className="border p-2 w-full rounded-xl">
+              {statuses.map(s=><option key={s}>{s}</option>)}
+            </select>
+            <button onClick={addPlan} className="bg-black text-white w-full p-2 rounded-xl">追加</button>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-2xl shadow space-y-3">
+            <div className="font-bold">社員設定</div>
+            <div className="flex gap-2">
+              <input value={newMember} onChange={e=>setNewMember(e.target.value)} placeholder="社員名追加" className="border p-2 flex-1 rounded-xl" />
+              <button onClick={addMember} className="bg-black text-white px-4 rounded-xl">追加</button>
+            </div>
+            <div className="space-y-2">
+              {members.map((m,i)=>(
+                <div key={i} className="flex items-center gap-2">
+                  {editingMemberIndex===i ? (
+                    <>
+                      <input value={editingMemberValue} onChange={e=>setEditingMemberValue(e.target.value)} className="border p-2 flex-1 rounded-xl" />
+                      <button onClick={()=>saveEditMember(i)} className="px-3 py-2 rounded-xl bg-green-600 text-white text-sm">保存</button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="border p-2 flex-1 rounded-xl bg-zinc-50">{m}</div>
+                      <button onClick={()=>startEditMember(i)} className="px-3 py-2 rounded-xl border text-sm">編集</button>
+                    </>
+                  )}
+                  <button onClick={()=>deleteMember(i)} className="px-3 py-2 rounded-xl border text-red-600 text-sm">削除</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl shadow space-y-3">
+            <div className="font-bold">工種設定</div>
+            <div className="flex gap-2">
+              <input value={newType} onChange={e=>setNewType(e.target.value)} placeholder="工種追加" className="border p-2 flex-1 rounded-xl" />
+              <button onClick={addWorkType} className="bg-black text-white px-4 rounded-xl">追加</button>
+            </div>
+            <div className="space-y-2">
+              {workTypes.map((w,i)=>(
+                <div key={i} className="flex items-center gap-2">
+                  {editingTypeIndex===i ? (
+                    <>
+                      <input value={editingTypeValue} onChange={e=>setEditingTypeValue(e.target.value)} className="border p-2 flex-1 rounded-xl" />
+                      <button onClick={()=>saveEditType(i)} className="px-3 py-2 rounded-xl bg-green-600 text-white text-sm">保存</button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="border p-2 flex-1 rounded-xl bg-zinc-50">{w}</div>
+                      <button onClick={()=>startEditType(i)} className="px-3 py-2 rounded-xl border text-sm">編集</button>
+                    </>
+                  )}
+                  <button onClick={()=>deleteType(i)} className="px-3 py-2 rounded-xl border text-red-600 text-sm">削除</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl shadow space-y-2">
+            <div className="font-bold">予定一覧</div>
+            {plans.length===0 && <div className="text-sm text-zinc-500">まだ予定はありません</div>}
+            {plans.map(p=>(
+              <div key={p.id} className="border rounded-xl p-3 flex justify-between items-start gap-2">
+                <div>
+                  <div className="font-semibold">{p.date} / {p.site}</div>
+                  <div className="text-sm text-zinc-600">{p.workType} / {p.leader}</div>
+                  <div className={`inline-block mt-1 text-xs px-2 py-1 rounded ${getColor(p.status)}`}>{p.status}</div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={()=>nextStatus(p.id)} className="text-xs border px-2 py-1 rounded-lg">状態</button>
+                  <button onClick={()=>removePlan(p.id)} className="text-xs border px-2 py-1 rounded-lg text-red-600">削除</button>
+                </div>
               </div>
             ))}
           </div>
-        )
-      })}
-    </div>
-
-    {/* 登録 */}
-    <div className="bg-white p-4 rounded shadow space-y-2">
-      <input value={date} readOnly className="border p-2 w-full" />
-      <input value={site} onChange={e=>setSite(e.target.value)} placeholder="現場" className="border p-2 w-full" />
-
-      <select value={leader} onChange={e=>setLeader(e.target.value)} className="border p-2 w-full">
-        {members.map(m=><option key={m}>{m}</option>)}
-      </select>
-
-      <select value={workType} onChange={e=>setWorkType(e.target.value)} className="border p-2 w-full">
-        {workTypes.map(w=><option key={w}>{w}</option>)}
-      </select>
-
-      <button onClick={addPlan} className="bg-black text-white w-full p-2">追加</button>
-    </div>
-
-    {/* 一覧 */}
-    <div className="space-y-2">
-      {plans.map(p=>(
-        <div key={p.id} className="bg-white p-3 rounded shadow flex justify-between items-center">
-          <div>
-            <div>{p.date} {p.site}</div>
-            <div className="text-sm text-gray-500">{p.workType} / {p.leader}</div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={()=>nextStatus(p.id)} className="text-xs">状態</button>
-            <button onClick={()=>removePlan(p.id)} className="text-xs text-red-500">削除</button>
-          </div>
         </div>
-      ))}
+      </div>
     </div>
-
-  </div>
   )
 }
 
