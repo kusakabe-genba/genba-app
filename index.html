@@ -43,10 +43,13 @@ function App(){
   const [workType,setWorkType] = useState(defaultWorkTypes[0]);
   const [status,setStatus] = useState("予定");
   const [workers,setWorkers] = useState([]);
+
   const [newMember,setNewMember] = useState("");
   const [newType,setNewType] = useState("");
+
   const [editingMemberIndex,setEditingMemberIndex] = useState(null);
   const [editingMemberValue,setEditingMemberValue] = useState("");
+
   const [editingTypeIndex,setEditingTypeIndex] = useState(null);
   const [editingTypeValue,setEditingTypeValue] = useState("");
 
@@ -64,6 +67,7 @@ function App(){
 
   useEffect(()=>{
     if (!members.includes(leader)) setLeader(members[0] || "");
+    setWorkers(prev => prev.filter(w => members.includes(w)));
   },[members]);
 
   useEffect(()=>{
@@ -72,7 +76,19 @@ function App(){
 
   function addPlan(){
     if(!date || !site) return alert("日付と現場を入れて");
-    setPlans([{ id: Date.now(), date, site, leader, workType, status, workers }, ...plans]);
+    if(!leader) return alert("責任者を選んで");
+    setPlans([
+      {
+        id: Date.now(),
+        date,
+        site,
+        leader,
+        workType,
+        status,
+        workers
+      },
+      ...plans
+    ]);
     setSite("");
     setStatus("予定");
     setWorkers([]);
@@ -177,7 +193,11 @@ function App(){
   }
 
   function toggleWorker(name){
-    setWorkers(prev => prev.includes(name) ? prev.filter(w => w !== name) : [...prev, name]);
+    setWorkers(prev =>
+      prev.includes(name)
+        ? prev.filter(w => w !== name)
+        : [...prev, name]
+    );
   }
 
   function getColor(s){
@@ -263,30 +283,46 @@ function App(){
             <div className="font-bold">予定登録</div>
             <input value={date} readOnly placeholder="日付をカレンダーで選択" className="border p-2 w-full rounded-xl" />
             <input value={site} onChange={e=>setSite(e.target.value)} placeholder="現場名" className="border p-2 w-full rounded-xl" />
-            <select value={leader} onChange={e=>setLeader(e.target.value)} className="border p-2 w-full rounded-xl">
-              {members.map(m=><option key={m}>{m}</option>)}
-            </select>
-            <select value={workType} onChange={e=>setWorkType(e.target.value)} className="border p-2 w-full rounded-xl">
-              {workTypes.map(w=><option key={w}>{w}</option>)}
-            </select>
-            <div className="border p-3 w-full rounded-xl">
-              <div className="mb-2 text-sm font-semibold">作業員</div>
+
+            <div className="space-y-1">
+              <div className="text-sm font-semibold">責任者</div>
+              <select value={leader} onChange={e=>setLeader(e.target.value)} className="border p-2 w-full rounded-xl">
+                {members.map(m=><option key={m}>{m}</option>)}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-sm font-semibold">工種</div>
+              <select value={workType} onChange={e=>setWorkType(e.target.value)} className="border p-2 w-full rounded-xl">
+                {workTypes.map(w=><option key={w}>{w}</option>)}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-sm font-semibold">作業員</div>
               <div className="grid grid-cols-2 gap-2">
-                {members.map(m => (
+                {members.map(m=>(
                   <button
                     type="button"
                     key={m}
                     onClick={()=>toggleWorker(m)}
-                    className={`rounded-xl border px-3 py-2 text-sm ${workers.includes(m) ? 'bg-black text-white border-black' : 'bg-white'}`}
+                    className={`rounded-xl border px-3 py-2 text-sm ${
+                      workers.includes(m) ? "bg-black text-white border-black" : "bg-white"
+                    }`}
                   >
                     {m}
                   </button>
                 ))}
               </div>
             </div>
-            <select value={status} onChange={e=>setStatus(e.target.value)} className="border p-2 w-full rounded-xl">
-              {statuses.map(s=><option key={s}>{s}</option>)}
-            </select>
+
+            <div className="space-y-1">
+              <div className="text-sm font-semibold">状態</div>
+              <select value={status} onChange={e=>setStatus(e.target.value)} className="border p-2 w-full rounded-xl">
+                {statuses.map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+
             <button onClick={addPlan} className="bg-black text-white w-full p-2 rounded-xl">追加</button>
           </div>
         </div>
@@ -352,7 +388,7 @@ function App(){
                 <div>
                   <div className="font-semibold">{p.date} / {p.site}</div>
                   <div className="text-sm text-zinc-600">{p.workType} / 責任者: {p.leader}</div>
-                  <div className="text-sm text-zinc-500">作業員: {(p.workers || []).length ? p.workers.join(' / ') : '未設定'}</div>
+                  <div className="text-sm text-zinc-500">作業員: {(p.workers || []).length ? p.workers.join(" / ") : "未設定"}</div>
                   <div className={`inline-block mt-1 text-xs px-2 py-1 rounded ${getColor(p.status)}`}>{p.status}</div>
                 </div>
                 <div className="flex gap-2">
