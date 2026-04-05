@@ -14,6 +14,7 @@
 
 <script type="text/babel">
 const { useState, useEffect } = React;
+  const API_URL = "https://script.google.com/macros/s/AKfycbwks3ZrPQiRbvWVQfyU1WI7g_JYv-vsD3RTM7WNkXZo8JIj1oqk6MwPI0V-wS8RoNGl/exec;
 
 const defaultMembers = ["社長","班長","山田","田中"];
 const defaultWorkTypes = ["舗装工","路盤工","掘削","埋戻し"];
@@ -21,9 +22,8 @@ const statuses = ["予定","変更","確定","中止"];
 
 function App(){
   const [plans,setPlans] = useState(()=>{
-    const saved = localStorage.getItem("plans_v3");
-    return saved ? JSON.parse(saved) : [];
-  });
+  return [];
+});
 
   const [members,setMembers] = useState(()=>{
     const saved = localStorage.getItem("members_v3");
@@ -52,10 +52,13 @@ function App(){
 
   const [editingTypeIndex,setEditingTypeIndex] = useState(null);
   const [editingTypeValue,setEditingTypeValue] = useState("");
-
-  useEffect(()=>{
-    localStorage.setItem("plans_v3", JSON.stringify(plans));
-  },[plans]);
+useEffect(() => {
+  fetch(API_URL)
+    .then(res => res.json())
+    .then(data => {
+      setPlans(data);
+    });
+}, []);
 
   useEffect(()=>{
     localStorage.setItem("members_v3", JSON.stringify(members));
