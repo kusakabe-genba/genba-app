@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>現場予定表アプリ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-zinc-100">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useMemo, useState, useEffect } = React;
+
+    const defaultMembers = ["社長", "班長", "山田", "田中", "上村", "トシちゃん"];
+    const statuses = ["予定", "変更", "確定", "中止"];
+    const defaultWorkTypes = ["舗装工", "路盤工", "掘削", "埋戻し", "切削", "区画線", "清掃", "その他"];
+    const initialPlans = [
+      {
+        id: 1,
+        date: "2026-03-23",
+        site: "熊本市南区A現場",
+        workType: "舗装工",
+        leader: "班長",
+        members: ["社長", "班長", "山田"],
+        note: "朝8:00集合 / 合材確認",
+        status: "予定",
+      },
+      {
+        id: 2,
+        date: "2026-03-24",
+        site: "益城町B現場",
+        workType: "路盤工",
+        leader: "トシちゃん",
+        members: ["トシちゃん", "田中", "上村"],
+        note: "雨天時は翌日に変更",
+        status: "変更",
+      },
+    ];
+
+    function Badge({ text }) {
+      const styles = {
+        予定: "bg-zinc-100 text-zinc-700",
+        変更: "bg-amber-100 text-amber-800",
+        確定: "bg-emerald-100 text-emerald-800",
+        中止: "bg-red-100 text-red-700",
+      };
+      return (
+        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${styles[text] || "bg-zinc-100 text-zinc-700"}`}>
+          {text}
+        </span>
+      );
+    }
+
+    function getWeekRange(baseDate) {
+      const base = baseDate ? new Date(baseDate) : new Date();
+      const day = base.getDay();
+      const diffToMonday = day === 0 ? -6 : 1 - day;
+      const start = new Date(base);
+      start.setDate(base.getDate() + diffToMonday);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return { start, end };
+    }
+
+    function toDateInputValue(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+
+    function ScheduleApp() {
+      const [plans, setPlans] = useState(() => {
+        const saved = localStorage.getItem("plans");
+        return saved ? JSON.parse(saved) : initialPlans;
+      });
+      const [members, setMembers] = useState(() => {
+        const saved = localStorage.getItem("members");
+        return saved ? JSON.parse(saved) : defaultMembers;
+      });
+      const [workTypes, setWorkTypes] = useState(() => {
+        const saved = localStorage.getItem("workTypes");
+        return saved ? JSON.parse(saved) : defaultWorkTypes;
+      });
+
+      const [newWorkType, setNewWorkType] = useState("");
+      const [editingWorkType, setEditingWorkType] = useState(null);
+      const [editingWorkTypeName, setEditingWorkTypeName] = useState("");
+
+      const [newMemberName, setNewMemberName] = useState("");
+      const [editingMember, setEditingMember] = useState(null);
+      const [editingName, setEditingName] = useState("");
+
+      const [viewMode, setViewMode] = useState("week");
+      const [weekBaseDate, setWeekBaseDate] = useState(toDateInputValue(new Date()));
+      const [filterDate, setFilterDate] = useState("");
+      const [filterMember, setFilterMember] = useState("全員");
+      const [filterStatus, setFilterStatus] = useState("全部");
+
+      const [date, setDate] = useState("");
+      const [site, setSite] = useState("");
+      const [workType, setWorkType] = useState(defaultWorkTypes[0]);
+      const [leader, setLeader] = useState(defaultMembers[1]);
+      const [selectedMembers, setSelectedMembers] = useState([defaultMembers[0], defaultMembers[1]]);
+      const [note, setNote] = useState("");
+      const [status, setStatus] = useState("予定");
+
+      useEffect(() => {
+        localStorage.setItem("plans", JSON.stringify(plans));
+      }, [plans]);
+
+      useEffect(() => {
+        localStorage.setItem("members", JSON.stringify(members));
+      }, [members]);
+
+      useEffect(() => {
+        localStorage.setItem("workTypes", JSON.stringify(workTypes));
+      }, [workTypes]);
+
+      const filteredPlans = useMemo(() => {
+        const week = getWeekRange(weekBaseDate);
+        return plans
+          .filter((p) => {
+            if (viewMode === "week") {
+              const planDate = new Date(p.date + "T00:00:00");
+              return planDate >= week.start && planDate <= week.end;
+            }
+            return !filterDate || p.date === filterDate;
+          })
+          .filter((p) => filterMember === "全員" || p.members.includes(filterMember) || p.leader === filterMember)
+          .filter((p) => filterStatus === "全部" || p.status === filterStatus)
+          .sort((a, b) => a.date.localeCompare(b.date));
+      }, [plans, filterDate, filterMember, filterStatus, viewMode, weekBaseDate]);
+
+      const summary = useMemo(() => ({
+        total: filteredPlans.length,
+        changed: filteredPlans.filter((p) => p.status === "変更").length,
+        confirmed: filteredPlans.filter((p) => p.status === "確定").length,
+        canceled: filteredPlans.filter((p) => p.status === "中止").length,
+      }), [filteredPlans]);
+
+      function addMember() {
+        const trimmed = newMemberName.trim();
+        if (!trimmed) return;
+        if (members.includes(trimmed)) return alert("その名前はもう入っとるばい");
+        setMembers((prev) => [...prev, trimmed]);
+        setSelectedMembers((prev) => [...prev, trimmed]);
+        setNewMemberName("");
+      }
+
+      function removeMember(name) {
+        setMembers((prev) => prev.filter((m) => m !== name));
+        setSelectedMembers((prev) => prev.filter((m) => m !== name));
+        setPlans((prev) =>
+          prev.map((p) => ({
+            ...p,
+            leader: p.leader === name ? "" : p.leader,
+            members: p.members.filter((m) => m !== name),
+          }))
+        );
+        if (leader === name) {
+          const next = members.find((m) => m !== name) || "";
+          setLeader(next);
+        }
+      }
+
+      function startEditMember(name) {
+        setEditingMember(name);
+        setEditingName(name);
+      }
+
+      function saveEditMember(oldName) {
+        const trimmed = editingName.trim();
+        if (!trimmed) return;
+        if (members.includes(trimmed) && trimmed !== oldName) return alert("同じ名前が既にあるばい");
+        setMembers((prev) => prev.map((m) => (m === oldName ? trimmed : m)));
+        setSelectedMembers((prev) => prev.map((m) => (m === oldName ? trimmed : m)));
+        setPlans((prev) =>
+          prev.map((p) => ({
+            ...p,
+            leader: p.leader === oldName ? trimmed : p.leader,
+            members: p.members.map((m) => (m === oldName ? trimmed : m)),
+          }))
+        );
+        if (leader === oldName) setLeader(trimmed);
+        setEditingMember(null);
+        setEditingName("");
+      }
+
+      function cancelEditMember() {
+        setEditingMember(null);
+        setEditingName("");
+      }
+
+      function addWorkType() {
+        const trimmed = newWorkType.trim();
+        if (!trimmed) return;
+        if (workTypes.includes(trimmed)) return alert("その工種はもう入っています");
+        setWorkTypes((prev) => [...prev, trimmed]);
+        setWorkType(trimmed);
+        setNewWorkType("");
+      }
+
+      function removeWorkType(name) {
+        setWorkTypes((prev) => prev.filter((w) => w !== name));
+        setPlans((prev) =>
+          prev.map((p) => ({
+            ...p,
+            workType: p.workType === name ? "その他" : p.workType,
+          }))
+        );
+        if (workType === name) {
+          const next = workTypes.find((w) => w !== name) || "その他";
+          setWorkType(next);
+        }
+      }
+
+      function startEditWorkType(name) {
+        setEditingWorkType(name);
+        setEditingWorkTypeName(name);
+      }
+
+      function saveEditWorkType(oldName) {
+        const trimmed = editingWorkTypeName.trim();
+        if (!trimmed) return;
+        if (workTypes.includes(trimmed) && trimmed !== oldName) return alert("同じ工種が既にあります");
+        setWorkTypes((prev) => prev.map((w) => (w === oldName ? trimmed : w)));
+        setPlans((prev) =>
+          prev.map((p) => ({
+            ...p,
+            workType: p.workType === oldName ? trimmed : p.workType,
+          }))
+        );
+        if (workType === oldName) setWorkType(trimmed);
+        setEditingWorkType(null);
+        setEditingWorkTypeName("");
+      }
+
+      function toggleMember(name) {
+        setSelectedMembers((prev) =>
+          prev.includes(name) ? prev.filter((m) => m !== name) : [...prev, name]
+        );
+      }
+
+      function shiftWeek(days) {
+        const base = new Date((weekBaseDate || toDateInputValue(new Date())) + "T00:00:00");
+        base.setDate(base.getDate() + days);
+        setWeekBaseDate(toDateInputValue(base));
+      }
+
+      function addPlan() {
+        if (!date || !site) return alert("日付と現場名は必須です");
+        if (selectedMembers.length === 0) return alert("担当メンバーを1人以上選んでください");
+        const newPlan = {
+          id: Date.now(),
+          date,
+          site,
+          workType,
+          leader,
+          members: selectedMembers,
+          note,
+          status,
+        };
+        setPlans((prev) => [newPlan, ...prev]);
+        setDate("");
+        setSite("");
+        setWorkType(workTypes[0] || "");
+        setLeader(members[0] || "");
+        setSelectedMembers(members.slice(0, Math.min(2, members.length)));
+        setNote("");
+        setStatus("予定");
+      }
+
+      function removePlan(id) {
+        setPlans((prev) => prev.filter((p) => p.id !== id));
+      }
+
+      function cycleStatus(id) {
+        setPlans((prev) =>
+          prev.map((p) => {
+            if (p.id !== id) return p;
+            const idx = statuses.indexOf(p.status);
+            const next = statuses[(idx + 1) % statuses.length];
+            return { ...p, status: next };
+          })
+        );
+      }
+
+      function resetAllData() {
+        if (!window.confirm("保存データを全部リセットします。よかですか？")) return;
+        localStorage.removeItem("plans");
+        localStorage.removeItem("members");
+        localStorage.removeItem("workTypes");
+        setPlans(initialPlans);
+        setMembers(defaultMembers);
+        setWorkTypes(defaultWorkTypes);
+        setSelectedMembers([defaultMembers[0], defaultMembers[1]]);
+        setLeader(defaultMembers[1]);
+        setWorkType(defaultWorkTypes[0]);
+      }
+
+      return (
+        <div className="min-h-screen bg-zinc-100 p-3 md:p-6">
+          <div className="mx-auto max-w-7xl space-y-4 pb-20">
+            <div className="rounded-3xl bg-white p-5 shadow-lg">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <h1 className="text-3xl font-bold md:text-5xl">現場予定表アプリ</h1>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-sm font-semibold shadow"
+                  >
+                    印刷
+                  </button>
+                  <button
+                    onClick={resetAllData}
+                    className="rounded-2xl bg-zinc-900 px-4 py-3 text-sm text-white shadow"
+                  >
+                    データ初期化
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-3xl bg-white p-5 shadow-lg">
+                <div className="text-sm text-zinc-500">表示件数</div>
+                <div className="mt-2 text-3xl font-bold">{summary.total}</div>
+              </div>
+              <div className="rounded-3xl bg-white p-5 shadow-lg">
+                <div className="text-sm text-zinc-500">変更あり</div>
+                <div className="mt-2 text-3xl font-bold">{summary.changed}</div>
+              </div>
+              <div className="rounded-3xl bg-white p-5 shadow-lg">
+                <div className="text-sm text-zinc-500">確定</div>
+                <div className="mt-2 text-3xl font-bold">{summary.confirmed}</div>
+              </div>
+              <div className="rounded-3xl bg-white p-5 shadow-lg">
+                <div className="text-sm text-zinc-500">中止</div>
+                <div className="mt-2 text-3xl font-bold">{summary.canceled}</div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl bg-white p-5 shadow-lg">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <h2 className="text-xl font-bold">共有メンバー設定</h2>
+                <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
+                  <input
+                    value={newMemberName}
+                    onChange={(e) => setNewMemberName(e.target.value)}
+                    placeholder="追加する名前"
+                    className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none md:w-56"
+                  />
+                  <button
+                    onClick={addMember}
+                    className="rounded-2xl bg-black px-4 py-3 text-sm font-semibold text-white shadow"
+                  >
+                    名前を追加
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {members.map((m) => (
+                  <div
+                    key={m}
+                    className="flex items-center gap-2 rounded-full border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm"
+                  >
+                    {editingMember === m ? (
+                      <>
+                        <input
+                          value={editingName}
+                          autoFocus
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEditMember(m);
+                            if (e.key === "Escape") cancelEditMember();
+                          }}
+                          className="rounded border px-2 py-1 text-sm"
+                        />
+                        <button onClick={() => saveEditMember(m)} className="text-xs text-green-600">
+                          保存
+                        </button>
+                        <button onClick={cancelEditMember} className="text-xs text-gray-500">
+                          取消
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span>{m}</span>
+                        <button onClick={() => startEditMember(m)} className="text-xs text-blue-600">
+                          編集
+                        </button>
+                        {!defaultMembers.includes(m) && (
+                          <button
+                            onClick={() => removeMember(m)}
+                            className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-red-600"
+                          >
+                            削除
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl bg-white p-5 shadow-lg">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <h2 className="text-xl font-bold">工種設定</h2>
+                <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
+                  <input
+                    value={newWorkType}
+                    onChange={(e) => setNewWorkType(e.target.value)}
+                    placeholder="追加する工種"
+                    className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none md:w-56"
+                  />
+                  <button
+                    onClick={addWorkType}
+                    className="rounded-2xl bg-black px-4 py-3 text-sm font-semibold text-white shadow"
+                  >
+                    工種を追加
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {workTypes.map((w) => (
+                  <div
+                    key={w}
+                    className="flex items-center gap-2 rounded-full border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm"
+                  >
+                    {editingWorkType === w ? (
+                      <>
+                        <input
+                          value={editingWorkTypeName}
+                          onChange={(e) => setEditingWorkTypeName(e.target.value)}
+                          className="rounded border px-2 py-1 text-sm"
+                        />
+                        <button onClick={() => saveEditWorkType(w)} className="text-xs text-green-600">
+                          保存
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span>{w}</span>
+                        <button onClick={() => startEditWorkType(w)} className="text-xs text-blue-600">
+                          編集
+                        </button>
+                        {!defaultWorkTypes.includes(w) && (
+                          <button
+                            onClick={() => removeWorkType(w)}
+                            className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-red-600"
+                          >
+                            削除
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+              <div className="rounded-3xl bg-white p-5 shadow-lg">
+                <h2 className="text-xl font-bold">予定登録</h2>
+                <div className="mt-4 space-y-3">
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                  />
+                  <input
+                    value={site}
+                    onChange={(e) => setSite(e.target.value)}
+                    placeholder="現場名"
+                    className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                  />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <select
+                      value={workType}
+                      onChange={(e) => setWorkType(e.target.value)}
+                      className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                    >
+                      {workTypes.map((w) => (
+                        <option key={w} value={w}>{w}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={leader}
+                      onChange={(e) => setLeader(e.target.value)}
+                      className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                    >
+                      {members.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="rounded-2xl border border-zinc-300 p-4">
+                    <div className="mb-3 text-sm font-semibold text-zinc-700">担当メンバー</div>
+                    <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                      {members.map((m) => {
+                        const active = selectedMembers.includes(m);
+                        return (
+                          <button
+                            key={m}
+                            onClick={() => toggleMember(m)}
+                            type="button"
+                            className={`rounded-2xl border px-3 py-2 text-sm font-medium ${
+                              active ? "border-zinc-900 bg-zinc-900 text-white" : "border-zinc-300 bg-white text-zinc-700"
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value)}
+                      className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                    >
+                      {statuses.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <input
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="注意点・変更内容"
+                      className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={addPlan}
+                    className="w-full rounded-2xl bg-black px-4 py-3 text-base font-semibold text-white shadow"
+                  >
+                    予定を登録
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-3xl bg-white p-5 shadow-lg">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                    <h2 className="text-xl font-bold">表示切替・絞り込み</h2>
+                    <button
+                      onClick={() => {
+                        setFilterDate("");
+                        setFilterMember("全員");
+                        setFilterStatus("全部");
+                      }}
+                      className="rounded-2xl border border-zinc-300 px-4 py-2 text-sm font-semibold"
+                    >
+                      クリア
+                    </button>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    <div className="grid gap-3 md:grid-cols-[160px_1fr_1fr]">
+                      <select
+                        value={viewMode}
+                        onChange={(e) => setViewMode(e.target.value)}
+                        className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                      >
+                        <option value="week">1週間表示</option>
+                        <option value="day">日別表示</option>
+                      </select>
+                      {viewMode === "week" ? (
+                        <div className="flex items-center gap-2 rounded-2xl border border-zinc-300 px-3 py-2">
+                          <button
+                            onClick={() => shiftWeek(-7)}
+                            className="rounded-xl border border-zinc-300 px-3 py-2 text-sm font-semibold"
+                          >
+                            前週
+                          </button>
+                          <input
+                            type="date"
+                            value={weekBaseDate}
+                            onChange={(e) => setWeekBaseDate(e.target.value)}
+                            className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-base outline-none"
+                          />
+                          <button
+                            onClick={() => shiftWeek(7)}
+                            className="rounded-xl border border-zinc-300 px-3 py-2 text-sm font-semibold"
+                          >
+                            次週
+                          </button>
+                        </div>
+                      ) : (
+                        <input
+                          type="date"
+                          value={filterDate}
+                          onChange={(e) => setFilterDate(e.target.value)}
+                          className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                        />
+                      )}
+                      <select
+                        value={filterMember}
+                        onChange={(e) => setFilterMember(e.target.value)}
+                        className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                      >
+                        <option value="全員">全員</option>
+                        {members.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <select
+                        value={filterStatus}
+                        onChange={(e) => setFilterStatus(e.target.value)}
+                        className="w-full rounded-2xl border border-zinc-300 px-4 py-3 text-base outline-none"
+                      >
+                        <option value="全部">全部</option>
+                        {statuses.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl bg-white p-5 shadow-lg">
+                  <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <h2 className="text-xl font-bold">予定一覧</h2>
+                    {viewMode === "week" && (
+                      <div className="rounded-2xl bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-700">
+                        表示週：{toDateInputValue(getWeekRange(weekBaseDate).start)} ～ {toDateInputValue(getWeekRange(weekBaseDate).end)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {filteredPlans.length === 0 && (
+                      <div className="rounded-2xl bg-zinc-100 p-4 text-sm text-zinc-600">
+                        条件に合う予定はまだありません。
+                      </div>
+                    )}
+                    {filteredPlans.map((plan) => (
+                      <div key={plan.id} className="rounded-2xl border border-zinc-200 p-4 shadow-sm">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-lg font-bold">{plan.date}</div>
+                              <Badge text={plan.status} />
+                              <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700">
+                                {plan.workType}
+                              </span>
+                            </div>
+                            <div className="text-lg font-semibold">{plan.site}</div>
+                            <div className="text-sm text-zinc-600">責任者：{plan.leader}</div>
+                            <div className="text-sm text-zinc-600">担当：{plan.members.join(" / ")}</div>
+                            <div className="rounded-xl bg-zinc-100 px-3 py-2 text-sm text-zinc-700">
+                              {plan.note || "備考なし"}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => cycleStatus(plan.id)}
+                              className="rounded-2xl border border-zinc-300 px-3 py-2 text-xs font-semibold"
+                            >
+                              ステータス変更
+                            </button>
+                            <button
+                              onClick={() => removePlan(plan.id)}
+                              className="rounded-2xl border border-zinc-300 px-3 py-2 text-xs font-semibold"
+                            >
+                              削除
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<ScheduleApp />);
+  </script>
+</body>
+</html>
